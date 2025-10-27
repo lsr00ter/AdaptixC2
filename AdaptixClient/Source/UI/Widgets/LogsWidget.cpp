@@ -2,6 +2,7 @@
 #include <UI/Widgets/AdaptixWidget.h>
 #include <Client/AuthProfile.h>
 #include <Utils/Convert.h>
+#include <Utils/DebugLog.h>
 
 LogsWidget::LogsWidget(AdaptixWidget* w) : DockTab("Logs", w->GetProfile()->GetProject(), ":/icons/logs")
 {
@@ -154,21 +155,25 @@ void LogsWidget::highlightCurrent() const
 
 void LogsWidget::AddLogs(const int type, const qint64 time, const QString &message ) const
 {
+    debugLog("LogsWidget::AddLogs", QString("ENTER: type=%1, message='%2'").arg(type).arg(message.left(30)));
+    
     QString sTime = UnixTimestampGlobalToStringLocal(time);
-    QString log = QString("[%1] -> ").arg(sTime);
-
-    logsConsoleTextEdit->appendPlain(log);
-
-    if( type == EVENT_CLIENT_CONNECT )           logsConsoleTextEdit->appendColor(message, QColor(COLOR_ConsoleWhite));
-    else if( type == EVENT_CLIENT_DISCONNECT )   logsConsoleTextEdit->appendColor(message, QColor(COLOR_Gray));
-    else if( type == EVENT_LISTENER_START )      logsConsoleTextEdit->appendColor(message, QColor(COLOR_BrightOrange));
-    else if( type == EVENT_LISTENER_STOP )       logsConsoleTextEdit->appendColor(message, QColor(COLOR_BrightOrange));
-    else if( type == EVENT_AGENT_NEW )           logsConsoleTextEdit->appendColor(message, QColor(COLOR_NeonGreen));
-    else if( type == EVENT_TUNNEL_START )        logsConsoleTextEdit->appendColor(message, QColor(COLOR_PastelYellow));
-    else if( type == EVENT_TUNNEL_STOP )         logsConsoleTextEdit->appendColor(message, QColor(COLOR_PastelYellow));
-    else                                         logsConsoleTextEdit->appendPlain(message);
-
-    logsConsoleTextEdit->appendPlain("\n");
+    QString prefix = QString("[%1] -> ").arg(sTime);
+    
+    // Determine color based on event type
+    QColor color;
+    if( type == EVENT_CLIENT_CONNECT )           color = QColor(COLOR_ConsoleWhite);
+    else if( type == EVENT_CLIENT_DISCONNECT )   color = QColor(COLOR_Gray);
+    else if( type == EVENT_LISTENER_START )      color = QColor(COLOR_BrightOrange);
+    else if( type == EVENT_LISTENER_STOP )       color = QColor(COLOR_BrightOrange);
+    else if( type == EVENT_AGENT_NEW )           color = QColor(COLOR_NeonGreen);
+    else if( type == EVENT_TUNNEL_START )        color = QColor(COLOR_PastelYellow);
+    else if( type == EVENT_TUNNEL_STOP )         color = QColor(COLOR_PastelYellow);
+    else                                         color = QColor(Qt::white);
+    
+    // Use optimized single-call method: 3 calls → 1 call
+    logsConsoleTextEdit->appendLogEntry(prefix, message, color);
+    debugLog("LogsWidget::AddLogs", "EXIT");
 }
 
 void LogsWidget::Clear() const

@@ -1,7 +1,4 @@
 #include <Utils/CustomElements.h>
-// Static member initialization
-bool TextEditConsole::globalSkipTrim = false;
-
 #include <Utils/NonBlockingDialogs.h>
 #include <Utils/DebugLog.h>
 #include <QTextBlock>
@@ -185,12 +182,8 @@ void TextEditConsole::appendPlain(const QString& text)
     
     cachedCursor.movePosition(QTextCursor::End);
     cachedCursor.insertText(text, QTextCharFormat());
-
-    debugLog("TextEditConsole::appendPlain", QString("skipTrim=%1, text='%2'").arg(skipTrim).arg(text.left(30)));
     
-    if (!skipTrim && !globalSkipTrim) {
-        trimExcessLines();
-    }
+    trimExcessLines();
 
     if (autoScroll || atBottom)
         verticalScrollBar()->setValue(verticalScrollBar()->maximum());
@@ -205,11 +198,7 @@ void TextEditConsole::appendFormatted(const QString& text, const std::function<v
     styleFn(fmt);
     cachedCursor.insertText(text, fmt);
 
-    debugLog("TextEditConsole::appendFormatted", QString("skipTrim=%1, text='%2'").arg(skipTrim).arg(text.left(30)));
-
-    if (!skipTrim && !globalSkipTrim) {
-        trimExcessLines();
-    }
+    trimExcessLines();
 
     if (autoScroll || atBottom)
         verticalScrollBar()->setValue(verticalScrollBar()->maximum());
@@ -266,7 +255,7 @@ void TextEditConsole::appendLogEntry(const QString& prefix, const QString& messa
     qint64 insertTime = timer.elapsed();
     
     // Trim only once for the entire log entry (unless skipping for batch operations)
-    if (!skipTrim && !globalSkipTrim) {
+    if (!skipTrim) {
         trimExcessLines();
         qint64 trimTime = timer.elapsed() - insertTime;
         debugLog("TextEditConsole::appendLogEntry", 
@@ -322,13 +311,4 @@ void TextEditConsole::trimExcessLines() {
     debugLog("TextEditConsole::trimExcessLines", 
         QString("EXIT: Deleted %1 lines in %2ms, newBlockCount=%3")
             .arg(excessCount).arg(elapsed).arg(newBlockCount));
-}
-// Static methods for global skip trim control
-void TextEditConsole::setGlobalSkipTrim(bool skip) {
-    globalSkipTrim = skip;
-    debugLog("TextEditConsole::setGlobalSkipTrim", QString("globalSkipTrim=%1").arg(skip));
-}
-
-bool TextEditConsole::getGlobalSkipTrim() {
-    return globalSkipTrim;
 }

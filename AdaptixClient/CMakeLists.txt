@@ -89,6 +89,7 @@ set(KONSOLE_HEADERS
 SET( HEADERS
         Headers/main.h
         Headers/Utils/Logs.h
+        Headers/Utils/DebugLog.h
         Headers/UI/Dialogs/DialogConnect.h
         Headers/Utils/Convert.h
         Headers/MainAdaptix.h
@@ -167,6 +168,7 @@ add_executable(AdaptixClient
         Resources/Resources.qrc
 
         Source/Utils/Logs.cpp
+        Source/Utils/DebugLog.cpp
         Source/UI/Dialogs/DialogConnect.cpp
         Source/Utils/Convert.cpp
         Source/MainAdaptix.cpp

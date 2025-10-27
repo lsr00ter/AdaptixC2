@@ -109,9 +109,10 @@ Q_OBJECT
     int  maxLines    = 30000;
     bool autoScroll  = false;
     bool noWrap      = true;
+    bool skipTrim    = false;  // Flag to skip trimming during batch operations
 
-    void trimExcessLines();
     void createContextMenu(const QPoint &pos);
+    static bool globalSkipTrim;  // Global flag to skip trimming on ALL instances during sync
     void setBufferSize(int size);
 
 public:
@@ -125,11 +126,21 @@ public:
     void appendUnderline(const QString& text);
     void appendColorBold(const QString& text, QColor color);
     void appendColorUnderline(const QString& text, QColor color);
+    
+    // Optimized method for log entries - combines multiple appends into one
+    void appendLogEntry(const QString& prefix, const QString& message, const QColor& color);
 
     void setMaxLines(int lines);
     void setAutoScrollEnabled(bool enabled);
     bool isAutoScrollEnabled() const;
     bool isNoWrapEnabled() const;
+    
+    // Batch optimization methods
+    void setSkipTrim(bool skip);
+    static void setGlobalSkipTrim(bool skip);    // Set global skip for ALL instances
+    static bool getGlobalSkipTrim();              // Get global skip state
+    bool getSkipTrim() const;
+    void trimExcessLines();  // Made public for manual trim after batch operations
 
 Q_SIGNALS:
     void ctx_find();

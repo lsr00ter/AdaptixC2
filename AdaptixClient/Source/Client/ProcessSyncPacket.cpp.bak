@@ -16,7 +16,23 @@
 #include <UI/Graph/SessionsGraph.h>
 #include <UI/Dialogs/DialogSyncPacket.h>
 
-#include <Utils/DebugLog.h>
+#include <QFile>
+#include <QTextStream>
+#include <QDateTime>
+#include <QMutex>
+
+// Debug logging utility
+static QMutex debugLogMutex;
+static void debugLog(const QString& function, const QString& message) {
+    QMutexLocker locker(&debugLogMutex);
+    QFile logFile("sync_debug.log");
+    if (logFile.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
+        QTextStream out(&logFile);
+        QString timestamp = QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss.zzz");
+        out << "[" << timestamp << "] [" << function << "] " << message << "\n";
+        logFile.close();
+    }
+}
 
 bool AdaptixWidget::isValidSyncPacket(QJsonObject jsonObj)
 {
@@ -399,31 +415,22 @@ void AdaptixWidget::processSyncPacket(QJsonObject jsonObj)
         debugLog("processSyncPacket", QString("BATCH START: type=0x%1, category=%2, count=%3")
             .arg(spType, 0, 16).arg(category).arg(packetsArray.size()));
 
-        // Batch optimization: disable UI updates and trim operations for ALL batches
+        // Batch optimization: disable UI updates and trim operations
+        bool skipTrimForEvents = (category == "events");
+        bool previousSkipTrim = false;
         
         if (LogsDock && LogsDock->GetLogsConsoleTextEdit()) {
             LogsDock->GetLogsConsoleTextEdit()->setUpdatesEnabled(false);
             debugLog("processSyncPacket", "setUpdatesEnabled(false)");
             
-            // Skip trim operations during batch processing - applies to ALL categories
-            // Set global skip trim for ALL TextEditConsole instances during batch
-            TextEditConsole::setGlobalSkipTrim(true);
-            debugLog("processSyncPacket", QString("setGlobalSkipTrim(true) for category=%1")
-                .arg(category));
-        }
-        
-
-        // Disable UI updates for all Agent Console widgets during batch processing
-        int disabledConsoleCount = 0;
-        for (auto it = AgentsMap.begin(); it != AgentsMap.end(); ++it) {
-            if (it.value() && it.value()->Console) {
-                it.value()->Console->SetConsoleUpdatesEnabled(false);
-                disabledConsoleCount++;
+            // Skip trim operations during batch processing for events
+            if (skipTrimForEvents) {
+                previousSkipTrim = LogsDock->GetLogsConsoleTextEdit()->getSkipTrim();
+                LogsDock->GetLogsConsoleTextEdit()->setSkipTrim(true);
+                debugLog("processSyncPacket", QString("setSkipTrim(true), previous=%1").arg(previousSkipTrim));
             }
         }
-        if (disabledConsoleCount > 0) {
-            debugLog("processSyncPacket", QString("Disabled UI updates for %1 Agent Consoles").arg(disabledConsoleCount));
-        }
+        
         qint64 batchStartTime = QDateTime::currentMSecsSinceEpoch();
 
         for (const QJsonValue &packetValue : packetsArray) {
@@ -437,32 +444,25 @@ void AdaptixWidget::processSyncPacket(QJsonObject jsonObj)
 
         if (LogsDock && LogsDock->GetLogsConsoleTextEdit()) {
             // Restore skip trim flag and perform single trim after batch
-            qint64 trimStartTime = QDateTime::currentMSecsSinceEpoch();
-            TextEditConsole::setGlobalSkipTrim(false);  // Restore global skip trim
-            LogsDock->GetLogsConsoleTextEdit()->trimExcessLines();  // Single trim for entire batch
-            qint64 trimTime = QDateTime::currentMSecsSinceEpoch() - trimStartTime;
-            debugLog("processSyncPacket", QString("trimExcessLines() for category=%1 took %2ms")
-                .arg(category).arg(trimTime));
+            if (skipTrimForEvents) {
+                qint64 trimStartTime = QDateTime::currentMSecsSinceEpoch();
+                LogsDock->GetLogsConsoleTextEdit()->setSkipTrim(previousSkipTrim);
+                LogsDock->GetLogsConsoleTextEdit()->trimExcessLines();  // Single trim for entire batch
+                qint64 trimTime = QDateTime::currentMSecsSinceEpoch() - trimStartTime;
+                debugLog("processSyncPacket", QString("trimExcessLines() took %1ms").arg(trimTime));
+            }
             
-
-            // Re-enable UI updates for all Agent Console widgets
-            int enabledConsoleCount = 0;
-            for (auto it = AgentsMap.begin(); it != AgentsMap.end(); ++it) {
-                if (it.value() && it.value()->Console) {
-                    it.value()->Console->SetConsoleUpdatesEnabled(true);
-                    enabledConsoleCount++;
-                }
-            }
-            if (enabledConsoleCount > 0) {
-                debugLog("processSyncPacket", QString("Re-enabled UI updates for %1 Agent Consoles").arg(enabledConsoleCount));
-            }
-
             LogsDock->GetLogsConsoleTextEdit()->setUpdatesEnabled(true);
             debugLog("processSyncPacket", "setUpdatesEnabled(true)");
         }
 
-        // NOTE: Do NOT increment receivedLogs here - recursive processSyncPacket() calls 
-        // already incremented it for each packet in the batch (would cause double-counting)
+        if( this->sync && dialogSyncPacket != nullptr ) {
+            int oldReceived = dialogSyncPacket->receivedLogs;
+            dialogSyncPacket->receivedLogs += packetsArray.size();
+            dialogSyncPacket->upgrade();
+            debugLog("processSyncPacket", QString("receivedLogs: %1 -> %2 (total=%3)")
+                .arg(oldReceived).arg(dialogSyncPacket->receivedLogs).arg(dialogSyncPacket->totalLogs));
+        }
         
         debugLog("processSyncPacket", QString("BATCH END: category=%1, processed=%2, time=%3ms")
             .arg(category).arg(packetsArray.size()).arg(batchProcessTime));
